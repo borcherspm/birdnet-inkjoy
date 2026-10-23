@@ -6,6 +6,7 @@ using the InkJoy OpenAPI.
 """
 
 import argparse
+from datetime import datetime
 import hashlib
 import json
 import mimetypes
@@ -20,6 +21,19 @@ SERVERS = {
     "global": "https://openapi.inkjoyframe.com",
     "china": "https://openapi.advisor.epaperframe.com",
 }
+
+LOG_FILE = Path("/config/inkjoy_bridge.log") if Path("/config").is_dir() else (Path(__file__).resolve().parent.parent / "inkjoy_bridge.log")
+
+
+def log(msg):
+    """Print to stdout and append timestamped entry to the persistent log file."""
+    print(msg)
+    try:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {msg}\n")
+    except Exception:
+        pass
 
 
 def load_env():
@@ -253,7 +267,7 @@ def main():
             "caption": args.style if args.layout == "bleed" else "folio",
         }
         opts_encoded = urllib.parse.quote(json.dumps(widget_opts))
-        print(f"🌿 Connecting widget to BirdNET-Go at: {args.birdnet_url} (Layout: {args.layout})")
+        log(f"🌿 Connecting widget to BirdNET-Go at: {args.birdnet_url} (Layout: {args.layout})")
 
         for base in search_bases:
             # Build list of render endpoints to try
@@ -268,22 +282,23 @@ def main():
                 ])
 
             for render_url in endpoints_to_try:
-                print(f"🎨 Trying to fetch render from: {render_url}")
+                log(f"🎨 Trying to fetch render from: {render_url}")
                 req = urllib.request.Request(render_url, headers=headers)
                 try:
                     with urllib.request.urlopen(req, timeout=45) as resp:
                         image_data = resp.read()
-                    print(f"✅ Render successfully generated ({len(image_data)/1024:.1f} KB)!")
+                    log(f"✅ Render successfully generated ({len(image_data)/1024:.1f} KB)!")
                     break
                 except Exception as e:
                     last_error = e
-                    print(f"  ↳ Could not fetch from {render_url}: {e}")
+                    log(f"  ↳ Could not fetch from {render_url}: {e}")
             if image_data:
                 break
 
         if not image_data:
-            print(f"\n❌ Failed to fetch render from Tesserae after trying: {candidates}")
-            print("Last error:", last_error)
+            log(f"❌ Failed to fetch render from Tesserae after trying: {candidates}")
+            log(f"Last error: {last_error}")
+            sys.exit(1)
             print("\nTroubleshooting tips:")
             print(" 1. Check Settings -> Apps -> Tesserae -> Configuration: make sure port 8765 is typed in and saved.")
             print(" 2. In /config/.env, set TESSERAE_URL to your Green's LAN IP, e.g. TESSERAE_URL=http://192.168.1.xxx:8765")
@@ -333,12 +348,12 @@ def main():
         try:
             last_hash = hash_file.read_text(encoding="utf-8").strip()
             if last_hash == current_hash:
-                print(f"💤 Image is identical to last push (SHA: {current_hash[:8]}). Skipping upload to preserve InkJoy battery.")
+                log(f"💤 Image is identical to last push (SHA: {current_hash[:8]}). Skipping upload to preserve InkJoy battery.")
                 sys.exit(0)
         except Exception:
             pass
 
-    print(f"📤 Uploading {filename} ({len(image_data) / 1024:.1f} KB) to InkJoy Muse...")
+    log(f"📤 Uploading {filename} ({len(image_data) / 1024:.1f} KB) to InkJoy Muse...")
     result = client.publish_image(target_id, image_data, filename)
 
     try:
@@ -346,7 +361,7 @@ def main():
     except Exception:
         pass
 
-    print("🎉 Success! Image pushed to your InkJoy Muse frame.")
+    log("🎉 Success! Image pushed to your InkJoy Muse frame.")
 
 
 if __name__ == "__main__":
