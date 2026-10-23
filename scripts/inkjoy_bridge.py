@@ -6,6 +6,7 @@ using the InkJoy OpenAPI.
 """
 
 import argparse
+import hashlib
 import json
 import mimetypes
 import os
@@ -135,6 +136,7 @@ def main():
     parser.add_argument("--birdnet-url", default=os.getenv("BIRDNET_URL", "http://db21ed7f-birdnet-go:8080"), help="BirdNET-Go address for live bird detections")
     parser.add_argument("--layout", default=os.getenv("BIRD_LAYOUT", "cluster"), help="Widget layout: cluster, list, latest, plate, bleed, gallery, chart")
     parser.add_argument("--style", default=os.getenv("BIRD_STYLE", "sheet"), help="Cluster style (sheet, numbered, wreath, notebook, drawer) or caption")
+    parser.add_argument("--force", action="store_true", help="Force upload even if image is identical to the last pushed image")
     parser.add_argument("--tesserae-render", action="store_true", help="Fetch live render from Tesserae Backyard Birds widget/dashboard and push")
 
     args = parser.parse_args()
@@ -323,8 +325,27 @@ def main():
         with open(fitted_path, "rb") as f:
             image_data = f.read()
 
+    # Smart hash dedup: skip upload if image is identical to the last pushed image
+    current_hash = hashlib.sha256(image_data).hexdigest()
+    hash_file = Path("/config/.inkjoy_last_hash") if Path("/config").is_dir() else (Path(__file__).resolve().parent.parent / ".inkjoy_last_hash")
+
+    if not args.force and hash_file.is_file():
+        try:
+            last_hash = hash_file.read_text(encoding="utf-8").strip()
+            if last_hash == current_hash:
+                print(f"💤 Image is identical to last push (SHA: {current_hash[:8]}). Skipping upload to preserve InkJoy battery.")
+                sys.exit(0)
+        except Exception:
+            pass
+
     print(f"📤 Uploading {filename} ({len(image_data) / 1024:.1f} KB) to InkJoy Muse...")
     result = client.publish_image(target_id, image_data, filename)
+
+    try:
+        hash_file.write_text(current_hash, encoding="utf-8")
+    except Exception:
+        pass
+
     print("🎉 Success! Image pushed to your InkJoy Muse frame.")
 
 
