@@ -1,0 +1,32 @@
+# Send a push notification whenever a new bird species is detected for the first time.
+#
+# Place this in your Home Assistant config directory under:
+#   automations/bird_new_species.yaml
+# And make sure you have:
+#   automation: !include_dir_merge_list automations/
+# in your Home Assistant `configuration.yaml`.
+#
+# Update `notify.notify` or your mobile app service (e.g., `notify.mobile_app_your_phone`).
+
+- alias: "Bird: New Species Detected"
+  id: bird_new_species
+  triggers:
+    - trigger: state
+      entity_id: sensor.bird_species_total
+      attribute: species
+  conditions:
+    # Only fire when the species list actually grows (prevents alerts on reset)
+    - condition: template
+      value_template: >-
+        {{ trigger.to_state.attributes.species | count >
+           trigger.from_state.attributes.species | count }}
+  actions:
+    - action: notify.notify
+      data:
+        title: "🐦 New Bird Species Spotted!"
+        message: >-
+          {{ states('sensor.last_bird_species') }}
+          ({{ state_attr('sensor.last_bird_species', 'scientific_name') }}),
+          confidence: {{ (state_attr('sensor.last_bird_species', 'confidence') | float(0) * 100) | round(0) }}%.
+          Total species recorded: {{ states('sensor.bird_species_total') }}.
+  mode: queued

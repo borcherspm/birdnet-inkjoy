@@ -1,0 +1,99 @@
+# Home Assistant Dashboard: Backyard Birds
+#
+# To install:
+# 1. In Home Assistant: Settings -> Dashboards -> Add Dashboard.
+# 2. Click the three dots (top right) -> Raw configuration editor.
+# 3. Paste this YAML configuration.
+#
+# Required HACS frontend plugins:
+# - Mushroom cards (lovelace-mushroom)
+# - ApexCharts card (apexcharts-card)
+# - Optional: HABirdDashboard (https://github.com/adamoberley/HABirdDashboard)
+
+views:
+  - title: Backyard Birds
+    path: birds
+    icon: mdi:bird
+    cards:
+      # Latest visitor banner
+      - type: custom:mushroom-template-card
+        entity: sensor.last_bird_species
+        primary: "{{ states('sensor.last_bird_species') }}"
+        secondary: >-
+          {{ state_attr('sensor.last_bird_species', 'scientific_name') }} ·
+          {{ (state_attr('sensor.last_bird_species', 'confidence') | float(0) * 100) | round(0) }}% confidence ·
+          Last heard: {{ as_timestamp(state_attr('sensor.last_bird_species', 'detected_at'), 0) | timestamp_custom('%H:%M', true) }}
+        icon: mdi:bird
+        icon_color: >-
+          {{ 'green' if state_attr('sensor.last_bird_species', 'confidence') | float(0) >= 0.8 else 'orange' }}
+        multiline_secondary: true
+
+      # Quick stats counters
+      - type: horizontal-stack
+        cards:
+          - type: custom:mushroom-template-card
+            entity: sensor.bird_species_total
+            primary: "{{ states('sensor.bird_species_total') }}"
+            secondary: Total Species
+            icon: mdi:format-list-bulleted
+            icon_color: deep-purple
+          - type: custom:mushroom-template-card
+            entity: sensor.bird_species_today
+            primary: "{{ states('sensor.bird_species_today') }}"
+            secondary: Species Today
+            icon: mdi:calendar-today
+            icon_color: teal
+          - type: custom:mushroom-template-card
+            entity: sensor.bird_detections_today
+            primary: "{{ states('sensor.bird_detections_today') }}"
+            secondary: Detections Today
+            icon: mdi:waveform
+            icon_color: amber
+
+      # Activity chart throughout the day
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Bird Detections per Hour
+        graph_span: 24h
+        span:
+          start: day
+        series:
+          - entity: sensor.bird_detections_today
+            name: Detections
+            type: column
+            color: '#4caf50'
+            group_by:
+              func: diff
+              duration: 1h
+              fill: zero
+
+      # Summary lists
+      - type: markdown
+        title: 🌅 Heard Today
+        content: >-
+          {% set species = state_attr('sensor.bird_species_today', 'species') %}
+          {{ species | join(', ') if species else 'No birds detected yet today.' }}
+
+      - type: markdown
+        title: 📚 All Recorded Species
+        content: >-
+          **{{ states('sensor.bird_species_total') }} species identified to date:**
+
+          {{ state_attr('sensor.bird_species_total', 'species') | join(', ') }}
+
+      # History log
+      - type: logbook
+        title: Detection Log
+        entities:
+          - sensor.last_bird_species
+        hours_to_show: 24
+
+  # Optional Embedded Collage tab (if running Saezuri or Tesserae)
+  - title: Visual Collage
+    path: collage
+    icon: mdi:image-multiple
+    cards:
+      - type: iframe
+        url: http://localhost:8090
+        aspect_ratio: 100%
