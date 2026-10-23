@@ -132,6 +132,9 @@ def main():
     parser.add_argument("--tesserae-url", default=os.getenv("TESSERAE_URL", "http://homeassistant.local:8765"), help="Tesserae base URL")
     parser.add_argument("--tesserae-token", default=os.getenv("TESSERAE_TOKEN"), help="Tesserae MCP / API Bearer token (optional if loopback)")
     parser.add_argument("--page-id", default=os.getenv("TESSERAE_PAGE_ID"), help="ID of the Tesserae dashboard/page to render")
+    parser.add_argument("--birdnet-url", default=os.getenv("BIRDNET_URL", "http://db21ed7f-birdnet-go:8080"), help="BirdNET-Go address for live bird detections")
+    parser.add_argument("--layout", default=os.getenv("BIRD_LAYOUT", "cluster"), help="Widget layout: cluster, list, latest, plate, bleed, gallery, chart")
+    parser.add_argument("--style", default=os.getenv("BIRD_STYLE", "sheet"), help="Cluster style (sheet, numbered, wreath, notebook, drawer) or caption")
     parser.add_argument("--tesserae-render", action="store_true", help="Fetch live render from Tesserae Backyard Birds widget/dashboard and push")
 
     args = parser.parse_args()
@@ -240,17 +243,27 @@ def main():
         last_error = None
         search_bases = [active_base] if active_base else candidates
 
+        # Cell options to pass to Backyard Birds widget
+        widget_opts = {
+            "url": args.birdnet_url,
+            "layout": args.layout,
+            "cluster_style": args.style if args.layout == "cluster" else "sheet",
+            "caption": args.style if args.layout == "bleed" else "folio",
+        }
+        opts_encoded = urllib.parse.quote(json.dumps(widget_opts))
+        print(f"🌿 Connecting widget to BirdNET-Go at: {args.birdnet_url} (Layout: {args.layout})")
+
         for base in search_bases:
-            # Build list of render endpoints to try for this dashboard
-            endpoints_to_try = []
+            # Build list of render endpoints to try
+            endpoints_to_try = [
+                # Primary: Authed MCP widget render with real live BirdNET-Go connection and layout options
+                f"{base}/api/mcp/widgets/backyard_birds/render.png?w={panel_w}&h={panel_h}&fresh=true&opts={opts_encoded}",
+            ]
             if page_id:
                 endpoints_to_try.extend([
                     f"{base}/compose/{page_id}/preview.png?w={panel_w}&h={panel_h}",
                     f"{base}/api/mcp/pages/{page_id}/preview.png?fresh=1",
-                    f"{base}/compose/{page_id}/panel.png?w={panel_w}&h={panel_h}",
                 ])
-            # Fallback to standalone widget render
-            endpoints_to_try.append(f"{base}/api/mcp/widgets/backyard_birds/render.png?w={panel_w}&h={panel_h}")
 
             for render_url in endpoints_to_try:
                 print(f"🎨 Trying to fetch render from: {render_url}")
