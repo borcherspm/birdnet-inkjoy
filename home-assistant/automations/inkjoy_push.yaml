@@ -1,26 +1,21 @@
 # Automation: Push BirdNET-Go Artwork to InkJoy Muse Frame
 #
-# Triggers:
-# 1. Whenever a NEW bird species is identified today (sensor.bird_species_today increments)
-# 2. At sunrise each morning to refresh the frame with the morning start
+# Runs every 15 minutes between 7:00 AM and 6:00 PM (daylight birding hours).
 #
-# Note: The smart hash check inside inkjoy_bridge.py ensures that even if an automation
-# fires, it will skip uploading if the visual image is 100% identical, preserving frame battery.
+# Smart Hash Deduplication:
+# The inkjoy_bridge.py script checks a visual SHA-256 hash of the rendered image.
+# If no new birds were detected and nothing visual has moved in the last 15 minutes,
+# it automatically aborts the upload, preserving your frame's battery life.
 
-- alias: "Birds: Push to InkJoy Frame"
-  id: bird_push_to_inkjoy
-  triggers:
-    # Trigger 1: Whenever a brand new species arrives today
-    - trigger: state
-      entity_id: sensor.bird_species_today
-    # Trigger 2: Morning sunrise refresh
-    - trigger: sun
-      event: sunrise
-  conditions:
-    # Only update while the sun is up
-    - condition: sun
-      after: sunrise
-      before: sunset
-  actions:
-    - action: shell_command.push_bird_to_inkjoy
-  mode: single
+alias: "Birds: 15-Minute Day Check"
+description: "Pushes fresh bird artwork to InkJoy frame every 15 minutes during daylight hours"
+trigger:
+  - platform: time_pattern
+    minutes: "/15"
+condition:
+  - condition: time
+    after: "07:00:00"
+    before: "18:00:00"
+action:
+  - action: shell_command.push_bird_to_inkjoy
+mode: single
